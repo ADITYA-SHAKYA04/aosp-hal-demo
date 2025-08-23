@@ -1,0 +1,6 @@
+// build.gradle (Framework)
+apply plugin: 'java'
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:4.0.0'
+}

@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.10)
+project(haptics_jni)
+add_library(haptics_jni SHARED ../hal/HapticsHal.cpp HapticsJni.cpp)
+find_library(log-lib log)
+target_link_libraries(haptics_jni ${log-lib})

@@ -1,6 +1,8 @@
 package com.example.led;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -11,18 +13,28 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 public class MainActivity extends Activity {
     private LedManager mLedManager = new LedManager();
     private ImageView flashStatusIcon;
     private TextView flashStatusText;
     private boolean isFlashOn = false;
+    private static final int CAMERA_PERMISSION_REQUEST = 1001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         setTheme(R.style.Theme_FlashTune);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // Check for camera permission
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
+        } else {
+            initializeFlashlight();
+        }
 
         flashStatusIcon = findViewById(R.id.flashStatusIcon);
         flashStatusText = findViewById(R.id.flashStatusText);
@@ -34,23 +46,27 @@ public class MainActivity extends Activity {
 
         btnOn.setOnClickListener(v -> {
             try {
+                Toast.makeText(this, "Attempting to turn ON LED via HAL...", Toast.LENGTH_SHORT).show();
                 mLedManager.turnOnLED();
                 isFlashOn = true;
                 updateFlashStatus(true);
                 Toast.makeText(this, "LED turned ON via HAL", Toast.LENGTH_SHORT).show();
             } catch (Exception e) {
-                Toast.makeText(this, "Failed to turn ON LED: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Failed to turn ON LED: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                android.util.Log.e("MainActivity", "Error turning on LED", e);
             }
         });
 
         btnOff.setOnClickListener(v -> {
             try {
+                Toast.makeText(this, "Attempting to turn OFF LED via HAL...", Toast.LENGTH_SHORT).show();
                 mLedManager.turnOffLED();
                 isFlashOn = false;
                 updateFlashStatus(false);
                 Toast.makeText(this, "LED turned OFF via HAL", Toast.LENGTH_SHORT).show();
             } catch (Exception e) {
-                Toast.makeText(this, "Failed to turn OFF LED: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Failed to turn OFF LED: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                android.util.Log.e("MainActivity", "Error turning off LED", e);
             }
         });
 
@@ -77,13 +93,51 @@ public class MainActivity extends Activity {
 
         btnNotify.setOnClickListener(v -> {
             try {
+                Toast.makeText(this, "Triggering notification blink...", Toast.LENGTH_SHORT).show();
                 mLedManager.blinkOnNotification();
                 sendNotification();
-                Toast.makeText(this, "Notification LED blink triggered", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Notification LED blink completed!", Toast.LENGTH_SHORT).show();
+                
+                // Update UI to show notification blink is happening
+                flashStatusText.setText("Notification Blink (HAL)");
+                
+                // Reset status after blink sequence completes
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(1000); // Wait for 3 blinks (3 * 150ms on + 150ms off)
+                        runOnUiThread(() -> {
+                            isFlashOn = false;
+                            updateFlashStatus(false);
+                        });
+                    } catch (InterruptedException ignored) {}
+                }).start();
+                
             } catch (Exception e) {
-                Toast.makeText(this, "Failed to trigger notification blink: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Failed to trigger notification blink: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                android.util.Log.e("MainActivity", "Error with notification blink", e);
             }
         });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CAMERA_PERMISSION_REQUEST) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                initializeFlashlight();
+                Toast.makeText(this, "Camera permission granted - Flash ready!", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Camera permission required to control flashlight", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    private void initializeFlashlight() {
+        try {
+            mLedManager.initializeFlashlight(this);
+        } catch (Exception e) {
+            Toast.makeText(this, "Failed to initialize flashlight: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void updateFlashStatus(boolean on) {
@@ -95,19 +149,28 @@ public class MainActivity extends Activity {
     private void sendNotification() {
         String channelId = "led_notify_channel";
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(channelId, "LED Notifications", NotificationManager.IMPORTANCE_DEFAULT);
+            NotificationChannel channel = new NotificationChannel(
+                channelId, 
+                "FlashTune LED Notifications", 
+                NotificationManager.IMPORTANCE_DEFAULT
+            );
+            channel.setDescription("Notifications that trigger LED blinks via HAL");
             nm.createNotificationChannel(channel);
         }
+        
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
                 new Notification.Builder(this, channelId) : new Notification.Builder(this);
-        builder.setContentTitle("FlashTune Notification")
-                .setContentText("LED will blink on notification!")
+                
+        builder.setContentTitle("FlashTune HAL Notification")
+                .setContentText("LED blinked 3 times via Hardware Abstraction Layer!")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setAutoCancel(true);
+                .setAutoCancel(true)
+                .setPriority(Notification.PRIORITY_DEFAULT);
+                
         nm.notify(1, builder.build());
-        flashStatusText.setText("Notification Sent");
-        Toast.makeText(this, "Notification sent! LED blinked via HAL.", Toast.LENGTH_SHORT).show();
+        android.util.Log.i("MainActivity", "Notification sent - LED should have blinked via HAL");
     }
 
     // Animate flash status icon

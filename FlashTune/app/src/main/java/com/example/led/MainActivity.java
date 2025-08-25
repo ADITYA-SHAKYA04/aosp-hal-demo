@@ -1,6 +1,5 @@
 package com.example.led;
 
-
 import android.app.Activity;
 import android.os.Bundle;
 import android.app.Notification;
@@ -13,18 +12,11 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraManager;
-import android.Manifest;
-import android.content.pm.PackageManager;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
-
 public class MainActivity extends Activity {
     private LedManager mLedManager = new LedManager();
     private ImageView flashStatusIcon;
     private TextView flashStatusText;
+    private boolean isFlashOn = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,42 +24,71 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-    flashStatusIcon = findViewById(R.id.flashStatusIcon);
-    flashStatusText = findViewById(R.id.flashStatusText);
+        flashStatusIcon = findViewById(R.id.flashStatusIcon);
+        flashStatusText = findViewById(R.id.flashStatusText);
 
-            // Request camera permission if needed
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1);
-            }
-
-    Button btnOn = findViewById(R.id.btnOn);
-    Button btnOff = findViewById(R.id.btnOff);
-    Button btnBlink = findViewById(R.id.btnBlink);
-    Button btnNotify = findViewById(R.id.btnNotify);
+        Button btnOn = findViewById(R.id.btnOn);
+        Button btnOff = findViewById(R.id.btnOff);
+        Button btnBlink = findViewById(R.id.btnBlink);
+        Button btnNotify = findViewById(R.id.btnNotify);
 
         btnOn.setOnClickListener(v -> {
-            setFlashlight(true);
-            animateFlashStatus(flashStatusIcon, true);
-            flashStatusText.setText("Flash ON");
-            Toast.makeText(this, "Flashlight turned ON", Toast.LENGTH_SHORT).show();
+            try {
+                mLedManager.turnOnLED();
+                isFlashOn = true;
+                updateFlashStatus(true);
+                Toast.makeText(this, "LED turned ON via HAL", Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Failed to turn ON LED: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
         });
 
         btnOff.setOnClickListener(v -> {
-            setFlashlight(false);
-            animateFlashStatus(flashStatusIcon, false);
-            flashStatusText.setText("Flash OFF");
-            Toast.makeText(this, "Flashlight turned OFF", Toast.LENGTH_SHORT).show();
+            try {
+                mLedManager.turnOffLED();
+                isFlashOn = false;
+                updateFlashStatus(false);
+                Toast.makeText(this, "LED turned OFF via HAL", Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Failed to turn OFF LED: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
         });
 
         btnBlink.setOnClickListener(v -> {
-            blinkFlash(5);
-            flashStatusText.setText("Blinking...");
-            Toast.makeText(this, "LED is blinking", Toast.LENGTH_SHORT).show();
+            try {
+                mLedManager.blinkLED(5);
+                flashStatusText.setText("Blinking via HAL...");
+                Toast.makeText(this, "LED blinking 5 times via HAL", Toast.LENGTH_SHORT).show();
+                
+                // Update UI after blink sequence completes
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(2500); // 5 blinks * 500ms per blink
+                        runOnUiThread(() -> {
+                            isFlashOn = false;
+                            updateFlashStatus(false);
+                        });
+                    } catch (InterruptedException ignored) {}
+                }).start();
+            } catch (Exception e) {
+                Toast.makeText(this, "Failed to blink LED: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
         });
 
         btnNotify.setOnClickListener(v -> {
-            sendNotification();
+            try {
+                mLedManager.blinkOnNotification();
+                sendNotification();
+                Toast.makeText(this, "Notification LED blink triggered", Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Failed to trigger notification blink: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
         });
+    }
+
+    private void updateFlashStatus(boolean on) {
+        animateFlashStatus(flashStatusIcon, on);
+        flashStatusText.setText(on ? "LED ON (HAL)" : "LED OFF (HAL)");
     }
 
     // Real notification integration: triggers LED blink on notification
@@ -85,52 +106,9 @@ public class MainActivity extends Activity {
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setAutoCancel(true);
         nm.notify(1, builder.build());
-        flashStatusText.setText("Notification Blink");
-        blinkFlash(3);
-        Toast.makeText(this, "Notification sent! LED blinked.", Toast.LENGTH_SHORT).show();
+        flashStatusText.setText("Notification Sent");
+        Toast.makeText(this, "Notification sent! LED blinked via HAL.", Toast.LENGTH_SHORT).show();
     }
-
-        // Real flash control using Camera2 API
-        private void setFlashlight(boolean enabled) {
-            CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-            try {
-                String cameraId = null;
-                for (String id : cameraManager.getCameraIdList()) {
-                    if (cameraManager.getCameraCharacteristics(id).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == Boolean.TRUE) {
-                        cameraId = id;
-                        break;
-                    }
-                }
-                if (cameraId != null) {
-                    cameraManager.setTorchMode(cameraId, enabled);
-                } else {
-                    Toast.makeText(this, "No flash available", Toast.LENGTH_SHORT).show();
-                }
-            } catch (CameraAccessException e) {
-                e.printStackTrace();
-                Toast.makeText(this, "Camera error", Toast.LENGTH_SHORT).show();
-            }
-        }
-
-        // Blink flash n times
-        private void blinkFlash(int times) {
-            new Thread(() -> {
-                for (int i = 0; i < times; i++) {
-                        runOnUiThread(() -> {
-                            setFlashlight(true);
-                            animateFlashStatus(findViewById(R.id.flashStatusIcon), true);
-                            flashStatusText.setText("Flash ON");
-                        });
-                        try { Thread.sleep(200); } catch (InterruptedException ignored) {}
-                        runOnUiThread(() -> {
-                            setFlashlight(false);
-                            animateFlashStatus(findViewById(R.id.flashStatusIcon), false);
-                            flashStatusText.setText("Flash OFF");
-                        });
-                        try { Thread.sleep(200); } catch (InterruptedException ignored) {}
-                }
-            }).start();
-        }
 
     // Animate flash status icon
     private void animateFlashStatus(ImageView icon, boolean on) {

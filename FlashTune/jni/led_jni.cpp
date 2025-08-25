@@ -11,6 +11,9 @@ JNIEXPORT void JNICALL Java_com_example_led_LedManager_turnOnLED(JNIEnv* env, jo
 JNIEXPORT void JNICALL Java_com_example_led_LedManager_turnOffLED(JNIEnv* env, jobject thiz) {
     turnOffFlash(env, thiz);
 }
+JNIEXPORT void JNICALL Java_com_example_led_LedManager_blinkLED(JNIEnv* env, jobject thiz, jint times) {
+    blinkLED(env, thiz, times);
+}
 JNIEXPORT void JNICALL Java_com_example_led_LedManager_blinkOnNotification(JNIEnv* env, jobject thiz) {
     blinkOnNotification(env, thiz);
 }
@@ -21,6 +24,7 @@ JNIEXPORT void JNICALL Java_com_example_led_LedManager_blinkOnNotification(JNIEn
 static JNINativeMethod gMethods[] = {
     {"turnOnLED", "()V", (void*)Java_com_example_led_LedManager_turnOnLED},
     {"turnOffLED", "()V", (void*)Java_com_example_led_LedManager_turnOffLED},
+    {"blinkLED", "(I)V", (void*)Java_com_example_led_LedManager_blinkLED},
     {"blinkOnNotification", "()V", (void*)Java_com_example_led_LedManager_blinkOnNotification}
 };
 

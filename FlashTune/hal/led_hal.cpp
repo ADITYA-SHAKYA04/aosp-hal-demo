@@ -37,12 +37,23 @@ bool writeSysfs(const char* path, const char* value) {
     return true;
 }
 
-void turnOnFlash() {
-    writeSysfs("/sys/class/led/led0/brightness", "1");
+void turnOnFlash(JNIEnv* env, jobject ledManagerObj) {
+    hal_log("HAL: Turn on LED");
+    writeSysfs("/sys/class/leds/led0/brightness", "255");
 }
 
-void turnOffFlash() {
-    writeSysfs("/sys/class/led/led0/brightness", "0");
+void turnOffFlash(JNIEnv* env, jobject ledManagerObj) {
+    hal_log("HAL: Turn off LED");
+    writeSysfs("/sys/class/leds/led0/brightness", "0");
+}
+
+void blinkLED(JNIEnv* env, jobject ledManagerObj, int times) {
+    hal_log("HAL: Blink LED " + std::to_string(times) + " times");
+    for (int i = 0; i < times; ++i) {
+        writeSysfs("/sys/class/leds/led0/brightness", "255");
+        // In real implementation, add proper delay
+        writeSysfs("/sys/class/leds/led0/brightness", "0");
+    }
 }
 
 // Logging helper
